@@ -1,8 +1,6 @@
 #include <iostream>
 #include <iomanip>
-// #include <string>
 #include <vector>
-// #include <algorithm>
 #include <map>
 
 using namespace std;
@@ -72,15 +70,14 @@ struct Card {
     }
 
     // TODO ? def into battleValue?
-    // TODO ? guard lower?
-    // TODO ? hc values * def in some way? and lower?
     double calculateBattleValue() const {
         const int BREAK_VALUE = !this->canBreak ? 0 : 1;
-        const double GUARD_VALUE = !this->canGuard ? 0 : 1 + (def - 1) * 0.2;
-        const int PHC_VALUE = playerHealthCharge * 2;
-        const int OHC_VALUE = opponentHealthCharge * -2;
+        const double GUARD_VALUE = !this->canGuard ? 0 : def * 0.2;
+        const double PHC_VALUE = playerHealthCharge * def * 0.3;
+        const double OHC_VALUE = opponentHealthCharge * def * -0.3;
         return this->att + BREAK_VALUE + GUARD_VALUE + PHC_VALUE + OHC_VALUE;
     }
+    // TODO get more top heavy, deckAVG
     double calculateDraftValue() const {
         const int CHARGE_VALUE = !this->canAttack ? 0 : 1;
         const double DRW_VALUE = cardDraw * 0.5;
