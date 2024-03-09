@@ -6,6 +6,7 @@
 using namespace std;
 
 struct Player;
+// TODO items
 struct Card;
 struct Action;
 struct State;
@@ -47,20 +48,14 @@ struct Player {
     }
 };
 struct Card {
-    int instanceId;
-    int cost;
-    int att;
-    int def;
-    bool canAttack = false;
-    bool canBreak = false;
-    bool canGuard = false;
-    int playerHealthCharge;
-    int opponentHealthCharge;
-    int cardDraw;
+    int instanceId, type, cost, att, def;
+    bool canAttack = false, canBreak = false, canGuard = false;
+    int playerHealthCharge, opponentHealthCharge, cardDraw;
 
-    Card(int instanceId, int cost, int att, int def, const string& ABILITIES, int my_health_change, 
-            int opponent_health_change, int card_draw) : instanceId(instanceId), cost(cost), att(att), def(def), 
-            playerHealthCharge(my_health_change), opponentHealthCharge(opponent_health_change), cardDraw(card_draw) {
+    Card(int instanceId, int type, int cost, int att, int def, const string& ABILITIES, int my_health_change, 
+            int opponent_health_change, int card_draw) : instanceId(instanceId), type(type), cost(cost), 
+            att(att), def(def), playerHealthCharge(my_health_change), opponentHealthCharge(opponent_health_change), 
+            cardDraw(card_draw) {
         for (char c : ABILITIES) {
             if (c == 'C') this->canAttack = true;
             else if (c == 'B') this->canBreak = true;
@@ -155,11 +150,7 @@ State readAndSortBattleState() {
     return State(player, opponent, opponentsActions, opponentsBoard, playersHand, playersBoard);
 }
 pair<Player, Player> readPlayers() {
-    int player_health;
-    int player_mana;
-    int player_deck;
-    int player_rune;
-    int player_draw;
+    int player_health, player_mana, player_deck, player_rune, player_draw;
 
     cin >> player_health >> player_mana >> player_deck >> player_rune >> player_draw; cin.ignore();
     Player player(player_health, player_mana, player_deck);
@@ -189,6 +180,8 @@ vector<Action> readOpponentsActions() {
             cin >> attId;
             cin >> defId;
             opponentsActions.emplace_back(Action(attId, defId));
+        } else if (actionType == "USE") {
+            // TODO read use action
         }
     }
     return opponentsActions;
@@ -207,13 +200,14 @@ tuple<vector<Card>, vector<Card>, vector<Card>> readCards() {
         cin >> card_number >> instance_id >> location >> card_type >> cost >> attack >> defense 
                 >> abilities >> my_health_change >> opponent_health_change >> card_draw; cin.ignore();
 
-        Card card = Card(instance_id, cost, attack, defense, abilities, my_health_change, opponent_health_change, 
-                card_draw);
+        Card card = Card(instance_id, card_type, cost, attack, defense, abilities, my_health_change, 
+                opponent_health_change, card_draw);
         
         if (location == -1) opponentsBoard.emplace_back(card);
         else if (location == 0) playersHand.emplace_back(card);
         else if (location == 1) playersBoard.emplace_back(card);
-        else throw runtime_error("illegal location in readCards");
+        // TODO check output and use format()
+        else throw runtime_error("illegal location in readCards: " + location);
     }
     return tuple(opponentsBoard, playersHand, playersBoard);
 }
@@ -258,16 +252,18 @@ void draft() {
 }
 int chooseCardNumberToPick(const vector<Card>& DRAFT_CARDS) {
     double maxDraftValue = 0;
-    int cardNumberToPick = -1;
+    int cardNumberToPick = 0;
 
     cerr << "cardRatings: ";
     for (int cardNumber = 0; cardNumber < 3; cardNumber++) {
         const Card& CARD = DRAFT_CARDS[cardNumber];
-        double draftValue = CARD.calculateDraftValue();
-        cerr << draftValue << ", ";
-        if (draftValue > maxDraftValue) {
-            maxDraftValue = draftValue;
-            cardNumberToPick = cardNumber;
+        if (CARD.type == 0) {
+            double draftValue = CARD.calculateDraftValue();
+            cerr << draftValue << ", ";
+            if (draftValue > maxDraftValue) {
+                maxDraftValue = draftValue;
+                cardNumberToPick = cardNumber;
+            }
         }
     }
     cerr << endl;
@@ -283,10 +279,6 @@ void battle() {
         // TODO account for board <= 6
         // TODO do {} while (createdSpaceOnBoard); therefore reduce hand when summon
         const vector<Card> COMBO = findComboToUseMostMana(state.player.mana, state.playersHand);
-        cerr << "COMBO:" << endl;
-        for (const Card& CARD : COMBO) {
-            CARD.print();
-        }
         playCombo(COMBO, state.playersBoard, state.player.mana);
 
         // TODO ? for each oppCard find combo with min battleValue to kill?
@@ -295,14 +287,14 @@ void battle() {
             if (playersCard.canAttack && playersCard.att > 0) {
                 for (Card& opponentsCard : state.opponentsBoard) {
                     if (playersCard.canAttack && opponentsCard.def > 0) {
-                        cout << "ATTACK " << playersCard.instanceId << " " << opponentsCard.instanceId << " DIE!;";
+                        cout << "ATTACK " << playersCard.instanceId << " " << opponentsCard.instanceId << ";";
                         opponentsCard.def -= playersCard.att;
                         playersCard.canAttack = false;
                     }
                 }
             }
             if (playersCard.canAttack) {
-                cout << "ATTACK " << playersCard.instanceId << " -1 DIE MF!;";
+                cout << "ATTACK " << playersCard.instanceId << " -1;";
             }
         }
 
@@ -320,7 +312,7 @@ vector<Card> findComboToUseMostMana(int mana, const vector<Card>& PLAYERS_HAND) 
             int manaLeft = manaToBeUsed;
             for (int cardIndex = cardIndexToStart; cardIndex < PLAYERS_HAND.size(); cardIndex++) {
                 const Card& CARD = PLAYERS_HAND[cardIndex];
-                if (CARD.cost <= manaLeft) {
+                if (CARD.type == 0 && CARD.cost <= manaLeft) {
                     combo.emplace_back(CARD);
                     manaLeft -= CARD.cost;
                 }
@@ -341,7 +333,7 @@ int calculateCost(const vector<Card>& COMBO) {
 }
 void playCombo(const vector<Card>& COMBO, vector<Card>& playersBoard, int& mana) {
     for (const Card& CARD : COMBO) {
-        cout << "SUMMON " << CARD.instanceId << " yeeehhaaw;";
+        cout << "SUMMON " << CARD.instanceId << ";";
         mana -= CARD.cost;
         playersBoard.emplace_back(CARD);
     }
