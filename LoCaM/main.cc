@@ -48,6 +48,9 @@ struct Card {
     int cost;
     int att;
     int def;
+    bool canBreak = false;
+    bool canAttack = false;
+    bool canGuard = false;
 
     Card(int instanceId, int cost, int att, int def) {
         this->instanceId = instanceId;
@@ -56,17 +59,19 @@ struct Card {
         this->def = def;
     }
 
-    // TODO calculateRating with effects, calculateBattleValue
-    double calculateRating(const map<int, int>& PLAYERS_DECK_STRUCTURE) const {
-        double costEfficiency = (this->att + this->def) / (double) this->cost;
-        return costEfficiency;
+    // TODO with effects
+    int calculateBattleValue() const {
+        return this->att;
     }
-    // double calculateThreat() {
-    //     return this->att / (double) this->def;
-    // }
+    double calculateDraftValue(const map<int, int>& PLAYERS_DECK_STRUCTURE) const {
+        double divider = cost == 0 ? 0.5 : cost;
+        return (this->calculateBattleValue() + this->def) / divider;
+    }
     void print() const {
         cerr << "Card [ instanceId: " << setw(3) << instanceId << ", cost: " << setw(2) << cost 
-                << ", att: " << setw(2) << att << ", def: " << setw(3) << def << " ]" << endl;
+                << ", att: " << setw(2) << att << ", def: " << setw(3) << def << ", canAttack: " << canAttack
+                << (canBreak ? ", B" : "") << (canGuard ? ", G" : "") 
+                << " ]" << endl;
     }
 };
 struct Action {
@@ -113,9 +118,12 @@ State readAndSortBattleState() {
     auto [ player, opponent ] = readPlayers();
     vector<Action> opponentsActions = readOpponentsActions();
     auto [ opponentsBoard, playersHand, playersBoard ] = readCards();
-    sort(opponentsBoard.begin(), opponentsBoard.end(), [](Card a, Card b) { return a.att > b.att; });
+    sort(opponentsBoard.begin(), opponentsBoard.end(), 
+            [](Card a, Card b) { return a.calculateBattleValue() > b.calculateBattleValue(); });
     sort(playersHand.begin(), playersHand.end(), [](Card a, Card b) { return a.cost > b.cost; });
-    sort(playersBoard.begin(), playersBoard.end(), [](Card a, Card b) { return a.def < b.def; });
+    sort(playersBoard.begin(), playersBoard.end(), 
+            [](Card a, Card b) { return a.calculateBattleValue() < b.calculateBattleValue(); });
+    for_each(playersBoard.begin(), playersBoard.end(), [](Card a) { a.canAttack = true; });
 
     return State(player, opponent, opponentsActions, opponentsBoard, playersHand, playersBoard);
 }
@@ -178,15 +186,33 @@ tuple<vector<Card>, vector<Card>, vector<Card>> readCards() {
         int card_draw;
         cin >> card_number >> instance_id >> location >> card_type >> cost >> attack >> defense >> abilities >> my_health_change >> opponent_health_change >> card_draw; cin.ignore();
 
+        Card card = Card(instance_id, cost, attack, defense);
+        for (char c : abilities) {
+            switch (c) {
+                case 'C':
+                    card.canAttack = true;
+                    break;
+                case 'B':
+                    card.canBreak = true;
+                    break;
+                case 'G':
+                    card.canGuard = true;
+                    break;
+                case '-':
+                    break;
+                default:
+                    throw runtime_error("illegal ability char");
+            }
+        }
         switch (location) {
             case -1:
-                opponentsBoard.emplace_back(Card(instance_id, cost, attack, defense));
+                opponentsBoard.emplace_back(card);
                 break;
             case 0:
-                playersHand.emplace_back(Card(instance_id, cost, attack, defense));
+                playersHand.emplace_back(card);
                 break;
             case 1:
-                playersBoard.emplace_back(Card(instance_id, cost, attack, defense));
+                playersBoard.emplace_back(card);
                 break;
             default: throw runtime_error("illegal location in readCards");
         }
@@ -259,12 +285,16 @@ int findMaxCost(const vector<Card>& CARDS) {
 }
 vector<Card> findComboToUseMostMana(int mana, const vector<Card>& PLAYERS_HAND) {
     for (int manaToBeUsed = mana; manaToBeUsed >= 0; manaToBeUsed--) {
+        cerr << "manaToBeUsed: " << manaToBeUsed << endl;
         for (int cardIndexToStart = 0; cardIndexToStart < PLAYERS_HAND.size(); cardIndexToStart++) {
             vector<Card> combo;
+            int manaLeft = manaToBeUsed;
             for (int cardIndex = cardIndexToStart; cardIndex < PLAYERS_HAND.size(); cardIndex++) {
                 const Card& CARD = PLAYERS_HAND[cardIndex];
-                if (CARD.cost <= manaToBeUsed) {
+                CARD.print();
+                if (CARD.cost <= manaLeft) {
                     combo.emplace_back(CARD);
+                    manaLeft -= CARD.cost;
                 }
             }
             if (calculateCost(combo) == manaToBeUsed) {
@@ -304,7 +334,7 @@ int main() {
         cerr << "cardRatings: ";
         for (int cardNumber = 0; cardNumber < 3; cardNumber++) {
             const Card& CARD = playersHand[cardNumber];
-            double cardRating = CARD.calculateRating(playersDeckStructure);
+            double cardRating = CARD.calculateDraftValue(playersDeckStructure);
             cerr << cardRating << ", ";
             if (cardRating > maxCardRating) {
                 maxCardRating = cardRating;
@@ -324,17 +354,17 @@ int main() {
         const vector<Card> COMBO = findComboToUseMostMana(state.player.mana, state.playersHand);
         playCombo(COMBO, state.playersBoard);
 
-        // TODO attack opponent with biggest att
         for (Card& playersCard : state.playersBoard) {
-            bool canAttack = true;
-            for (Card& opponentsCard : state.opponentsBoard) {
-                if (canAttack == true && (opponentsCard.def > 0)) {
-                    cout << "ATTACK " << playersCard.instanceId << " " << opponentsCard.instanceId << " DIE!;";
-                    opponentsCard.def -= playersCard.att;
-                    canAttack = false;
+            if (playersCard.canAttack) {
+                for (Card& opponentsCard : state.opponentsBoard) {
+                    if (opponentsCard.def > 0) {
+                        cout << "ATTACK " << playersCard.instanceId << " " << opponentsCard.instanceId << " DIE!;";
+                        opponentsCard.def -= playersCard.att;
+                        playersCard.canAttack = false;
+                    }
                 }
             }
-            if (canAttack == true) {
+            if (playersCard.canAttack) {
                 cout << "ATTACK " << playersCard.instanceId << " -1 DIE MF!;";
             }
         }
