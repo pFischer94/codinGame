@@ -17,17 +17,17 @@ State readAndSortBattleState();
 pair<Player, Player> readPlayers();
 vector<Action> readOpponentsActions();
 tuple<vector<Card>, vector<Card>, vector<Card>> readCards();
+
 void printDraftCards(const vector<Card>& DRAFT_CARDS);
 void printState(const State& STATE);
 
 void draft();
 int chooseCardNumberToPick(const vector<Card>& DRAFT_CARDS);
-int findMaxCost(const vector<Card>& CARDS);
+
+void battle();
 vector<Card> findComboToUseMostMana(int mana, const vector<Card>& PLAYERS_HAND);
 int calculateCost(const vector<Card>& COMBO);
 void playCombo(const vector<Card>& COMBO, vector<Card>& playersBoard, int& mana);
-
-void battle();
 
 struct Player {
     int health;
@@ -71,8 +71,9 @@ struct Card {
         }
     }
 
-    // TODO maybe def into battleValue
-    // TODO move DRW_VALUE to draftValue
+    // TODO ? def into battleValue?
+    // TODO ? guard lower?
+    // TODO ? hc values * def in some way? and lower?
     double calculateBattleValue() const {
         const int BREAK_VALUE = !this->canBreak ? 0 : 1;
         const double GUARD_VALUE = !this->canGuard ? 0 : 1 + (def - 1) * 0.2;
@@ -87,8 +88,8 @@ struct Card {
         return (this->calculateBattleValue() + this->def + CHARGE_VALUE + DRW_VALUE) / divider;
     }
     void print() const {
-        cerr << "Card [ id: " << setw(2) << instanceId << ", cost: " << setw(2) << cost 
-                << ", att: " << setw(2) << att << ", def: " << setw(2) << def << ", rdy: " << canAttack 
+        cerr << "Card [ id: " << setw(2) << instanceId << ", att: " << setw(2) << att << ", cost: " << setw(2) << cost 
+                << ", def: " << setw(2) << def << ", rdy: " << canAttack 
                 << ", pHC: " << setw(2) << playerHealthCharge << ", oHC: " << setw(2) << opponentHealthCharge 
                 << ", drw: " << setw(1) << cardDraw << ", val: " << setw(4) << left << calculateBattleValue() << right 
                 << (canBreak ? ", B" : "") << (canGuard ? ", G" : "") << " ]" << endl;
@@ -219,6 +220,7 @@ tuple<vector<Card>, vector<Card>, vector<Card>> readCards() {
     }
     return tuple(opponentsBoard, playersHand, playersBoard);
 }
+
 void printDraftCards(const vector<Card>& DRAFT_CARDS) {
     cerr << "draftCards:" << endl;
     for (const Card& CARD : DRAFT_CARDS) {
@@ -274,14 +276,45 @@ int chooseCardNumberToPick(const vector<Card>& DRAFT_CARDS) {
     cerr << endl;
     return cardNumberToPick;
 }
-int findMaxCost(const vector<Card>& CARDS) {
-    int maxCost = 0;
-    for (const Card& CARD : CARDS) {
-        if (CARD.cost >= maxCost) {
-            maxCost = CARD.cost;
+
+void battle() {
+    // TODO extract sub methods
+    while (true) {
+        State state = readAndSortBattleState();
+        printState(state);
+        
+        // TODO account for board <= 6
+        // TODO do {} while (createdSpaceOnBoard); therefore reduce hand when summon
+        const vector<Card> COMBO = findComboToUseMostMana(state.player.mana, state.playersHand);
+        cerr << "COMBO:" << endl;
+        for (const Card& CARD : COMBO) {
+            CARD.print();
         }
+        playCombo(COMBO, state.playersBoard, state.player.mana);
+
+        // TODO ? for each oppCard find combo with min battleValue to kill?
+        // TODO ? only attack guards and then opponent?
+        for (Card& playersCard : state.playersBoard) {
+            if (playersCard.canAttack && playersCard.att > 0) {
+                for (Card& opponentsCard : state.opponentsBoard) {
+                    if (playersCard.canAttack && opponentsCard.def > 0) {
+                        cout << "ATTACK " << playersCard.instanceId << " " << opponentsCard.instanceId << " DIE!;";
+                        opponentsCard.def -= playersCard.att;
+                        playersCard.canAttack = false;
+                    }
+                }
+            }
+            if (playersCard.canAttack) {
+                cout << "ATTACK " << playersCard.instanceId << " -1 DIE MF!;";
+            }
+        }
+
+        if (state.playersHand.size() == 0 && state.playersBoard.size() == 0) {
+            cout << "PASS";
+        }
+
+        cout << endl;
     }
-    return maxCost;
 }
 vector<Card> findComboToUseMostMana(int mana, const vector<Card>& PLAYERS_HAND) {
     for (int manaToBeUsed = mana; manaToBeUsed >= 0; manaToBeUsed--) {
@@ -299,7 +332,8 @@ vector<Card> findComboToUseMostMana(int mana, const vector<Card>& PLAYERS_HAND) 
                 return combo;
             }
         }
-    }    
+    }
+    return vector<Card>();
 }
 int calculateCost(const vector<Card>& COMBO) {
     int cost = 0;
@@ -316,38 +350,9 @@ void playCombo(const vector<Card>& COMBO, vector<Card>& playersBoard, int& mana)
     }
 }
 
-void battle() {
-    while (true) {
-        State state = readAndSortBattleState();
-        printState(state);
-        
-        // TODO account for board <= 6
-        // TODO do {} while (createdSpaceOnBoard);
-        const vector<Card> COMBO = findComboToUseMostMana(state.player.mana, state.playersHand);
-        playCombo(COMBO, state.playersBoard, state.player.mana);
-
-        // TODO for each oppCard find combo with min battleValue to kill
-        for (Card& playersCard : state.playersBoard) {
-            if (playersCard.canAttack && playersCard.att > 0) {
-                for (Card& opponentsCard : state.opponentsBoard) {
-                    if (playersCard.canAttack && opponentsCard.def > 0) {
-                        cout << "ATTACK " << playersCard.instanceId << " " << opponentsCard.instanceId << " DIE!;";
-                        opponentsCard.def -= playersCard.att;
-                        playersCard.canAttack = false;
-                    }
-                }
-            }
-            if (playersCard.canAttack) {
-                cout << "ATTACK " << playersCard.instanceId << " -1 DIE MF!;";
-            }
-        }
-        cout << endl;
-    }
-}
-
 int main() {
     // TODO take care of warnings
-    // TODO struct DeckStructure with targetStructure, use it to calculateRating
+    // TODO ? struct DeckStructure with targetStructure, use it to calculateRating?
     draft();
     battle();
 }
