@@ -12,12 +12,15 @@ struct Card;
 struct Action;
 struct State;
 
+void draft();
 vector<Card> readDraftCards();
+void printDraftCards(const vector<Card>& DRAFT_CARDS);
+int chooseCardNumberToPick(const vector<Card>& DRAFT_CARDS);
+void battle();
 State readAndSortBattleState();
 pair<Player, Player> readPlayers();
 vector<Action> readOpponentsActions();
 tuple<vector<Card>, vector<Card>, vector<Card>> readCards();
-void printDraftCards(const vector<Card>& DRAFT_CARDS);
 void printState(const State& STATE);
 int findMaxCost(const vector<Card>& CARDS);
 vector<Card> findComboToUseMostMana(int mana, const vector<Card>& PLAYERS_HAND);
@@ -64,7 +67,7 @@ struct Card {
         double guardValue = this->canGuard ? 1 + (def - 1) * 0.2 : 0;
         return this->att + breakValue + guardValue;
     }
-    double calculateDraftValue(const map<int, int>& PLAYERS_DECK_STRUCTURE) const {
+    double calculateDraftValue() const {
         double divider = cost == 0 ? 0.5 : cost;
         return (this->calculateBattleValue() + (this->canAttack ? 1 : 0) + this->def) / divider;
     }
@@ -116,11 +119,68 @@ struct State {
             playersHand(playersHand), playersBoard(playersBoard) {}
 };
 
+void draft() {
+    int playersDeckCards = 0;
+    while (playersDeckCards < 30) {
+        const vector<Card> DRAFT_CARDS = readDraftCards();
+        printDraftCards(DRAFT_CARDS);
+        cout << "PICK " << chooseCardNumberToPick(DRAFT_CARDS) << endl;
+        playersDeckCards++;
+    }
+}
 vector<Card> readDraftCards() {
     readPlayers();
     readOpponentsActions();
     auto [ opponentsBoard, playersHand, playersBoard ] = readCards();
     return playersHand;
+}
+void printDraftCards(const vector<Card>& DRAFT_CARDS) {
+    cerr << "draftCards:" << endl;
+    for (const Card& CARD : DRAFT_CARDS) {
+        CARD.print();
+    }
+}
+int chooseCardNumberToPick(const vector<Card>& DRAFT_CARDS) {
+    double maxDraftValue = 0;
+    int cardNumberToPick = -1;
+
+    cerr << "cardRatings: ";
+    for (int cardNumber = 0; cardNumber < 3; cardNumber++) {
+        const Card& CARD = DRAFT_CARDS[cardNumber];
+        double draftValue = CARD.calculateDraftValue();
+        cerr << draftValue << ", ";
+        if (draftValue > maxDraftValue) {
+            maxDraftValue = draftValue;
+            cardNumberToPick = cardNumber;
+        }
+    }
+    cerr << endl;
+    return cardNumberToPick;
+}
+void battle() {
+    while (true) {
+        State state = readAndSortBattleState();
+        printState(state);
+        
+        const vector<Card> COMBO = findComboToUseMostMana(state.player.mana, state.playersHand);
+        playCombo(COMBO, state.playersBoard);
+
+        for (Card& playersCard : state.playersBoard) {
+            if (playersCard.canAttack && playersCard.att > 0) {
+                for (Card& opponentsCard : state.opponentsBoard) {
+                    if (opponentsCard.def > 0) {
+                        cout << "ATTACK " << playersCard.instanceId << " " << opponentsCard.instanceId << " DIE!;";
+                        opponentsCard.def -= playersCard.att;
+                        playersCard.canAttack = false;
+                    }
+                }
+            }
+            if (playersCard.canAttack) {
+                cout << "ATTACK " << playersCard.instanceId << " -1 DIE MF!;";
+            }
+        }
+        cout << endl;
+    }
 }
 State readAndSortBattleState() {
     auto [ player, opponent ] = readPlayers();
@@ -135,7 +195,7 @@ State readAndSortBattleState() {
     sort(playersBoard.begin(), playersBoard.end(), 
             [](Card a, Card b) { return a.calculateBattleValue() < b.calculateBattleValue(); });
 
-    for_each(playersBoard.begin(), playersBoard.end(), [](Card a) { a.canAttack = true; });
+    for_each(playersBoard.begin(), playersBoard.end(), [](Card& a) { a.canAttack = true; });
     return State(player, opponent, opponentsActions, opponentsBoard, playersHand, playersBoard);
 }
 pair<Player, Player> readPlayers() {
@@ -230,12 +290,6 @@ tuple<vector<Card>, vector<Card>, vector<Card>> readCards() {
     }
     return tuple(opponentsBoard, playersHand, playersBoard);
 }
-void printDraftCards(const vector<Card>& DRAFT_CARDS) {
-    cerr << "draftCards:" << endl;
-    for (const Card& CARD : DRAFT_CARDS) {
-        CARD.print();
-    }
-}
 void printState(const State& STATE) {
     // cerr << "opponent:" << endl;
     // STATE.opponent.print();
@@ -306,53 +360,6 @@ void playCombo(const vector<Card>& COMBO, vector<Card>& playersBoard) {
 
 int main() {
     // TODO struct DeckStructure with targetStructure, use it to calculateRating
-    map<int, int> playersDeckStructure;
-    int playersDeckCards = 0;
-
-    // DRAFT
-    while (playersDeckCards < 30) {
-        vector<Card> draftCards = readDraftCards();
-        printDraftCards(draftCards);
-        double maxCardRating = 0;
-        int cardNumberToPick = -1;
-
-        cerr << "cardRatings: ";
-        for (int cardNumber = 0; cardNumber < 3; cardNumber++) {
-            const Card& CARD = draftCards[cardNumber];
-            double cardRating = CARD.calculateDraftValue(playersDeckStructure);
-            cerr << cardRating << ", ";
-            if (cardRating > maxCardRating) {
-                maxCardRating = cardRating;
-                cardNumberToPick = cardNumber;
-            }
-        }
-        cerr << endl;
-        cout << "PICK " << cardNumberToPick << endl;
-        playersDeckCards++;
-    }
-
-    // BATTLE
-    while (true) {
-        State state = readAndSortBattleState();
-        printState(state);
-        
-        const vector<Card> COMBO = findComboToUseMostMana(state.player.mana, state.playersHand);
-        playCombo(COMBO, state.playersBoard);
-
-        for (Card& playersCard : state.playersBoard) {
-            if (playersCard.canAttack && playersCard.att > 0) {
-                for (Card& opponentsCard : state.opponentsBoard) {
-                    if (opponentsCard.def > 0) {
-                        cout << "ATTACK " << playersCard.instanceId << " " << opponentsCard.instanceId << " DIE!;";
-                        opponentsCard.def -= playersCard.att;
-                        playersCard.canAttack = false;
-                    }
-                }
-            }
-            if (playersCard.canAttack) {
-                cout << "ATTACK " << playersCard.instanceId << " -1 DIE MF!;";
-            }
-        }
-        cout << endl;
-    }
+    draft();
+    battle();
 }
