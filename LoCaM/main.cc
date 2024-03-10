@@ -99,10 +99,15 @@ struct Action {
         this->activeId = summonedId;
         this->passiveId = 0;
     }
-    Action(int attId, int passiveId) {
+    Action(int attId, int targetId) {
         this->actionType = "ATTACK";
         this->activeId = attId;
-        this->passiveId = passiveId;
+        this->passiveId = targetId;
+    }
+    Action(string actionType, int itemId, int targetId) {
+        this->actionType = actionType;
+        this->activeId = itemId;
+        this->passiveId = targetId;
     }
     Action() {
         this->actionType = "PASS";
@@ -164,6 +169,8 @@ pair<Player, Player> readPlayers() {
     return pair(player, opponent);
 }
 vector<Action> readOpponentsActions() {
+    // TODO refactor readOpponentsActions()
+    bool debug = false;
     vector<Action> opponentsActions;
     int opponent_actions;
     cin >> opponent_actions; cin.ignore();
@@ -172,18 +179,28 @@ vector<Action> readOpponentsActions() {
         cin >> cardNumber;
         string actionType;
         cin >> actionType;
+        if (debug) cerr << "readOpponentsActions(): actions: " << opponent_actions << ", cardNumber: " << cardNumber 
+                << ", actionType: " << actionType;
         if (actionType == "SUMMON") {
             int summonedId;
-            cin >> summonedId; cin.ignore();
+            cin >> summonedId; 
+            // cin.ignore();
+            if (debug) cerr << ", summonedId: " << summonedId;
             opponentsActions.emplace_back(Action(summonedId));
         } else if (actionType == "ATTACK") {
             int attId;
             int defId;
-            cin >> attId;
-            cin >> defId;
+            cin >> attId >> defId;
+            if (debug) cerr << ", attId: " << attId;
+            if (debug) cerr << ", defId: " << defId;
             opponentsActions.emplace_back(Action(attId, defId));
         } else if (actionType == "USE") {
-            // TODO read use action
+            int itemId;
+            int targetId;
+            cin >> itemId >> targetId;
+            if (debug) cerr << ", itemId: " << itemId;
+            if (debug) cerr << ", targetId: " << targetId;
+            opponentsActions.emplace_back(Action("USE", itemId, targetId));
         } else {
             throw runtime_error("illegal actionType in readOpponentsActions(): " + actionType);
         }
@@ -191,6 +208,7 @@ vector<Action> readOpponentsActions() {
     return opponentsActions;
 }
 tuple<vector<Card>, vector<Card>, vector<Card>> readCards() {
+    bool debug = false;
     vector<Card> opponentsBoard;
     vector<Card> playersHand;
     vector<Card> playersBoard;
@@ -203,6 +221,9 @@ tuple<vector<Card>, vector<Card>, vector<Card>> readCards() {
         string abilities;
         cin >> card_number >> instance_id >> location >> card_type >> cost >> attack >> defense 
                 >> abilities >> my_health_change >> opponent_health_change >> card_draw; cin.ignore();
+        
+        if (debug) cerr << "readCards(): attack: " << attack << ", defense: " << defense << ", abilities: " << abilities 
+                << ", pHC: " << my_health_change << ", oHC " << opponent_health_change << endl;
 
         Card card = Card(instance_id, card_type, cost, attack, defense, abilities, my_health_change, 
                 opponent_health_change, card_draw);
@@ -227,18 +248,24 @@ void printDraftCards(const vector<Card>& DRAFT_CARDS) {
     }
 }
 void printState(const State& STATE) {
-    // cerr << "opponent:" << endl;
-    // STATE.opponent.print();
-    cerr /* << endl */ << "opponentsBoard:" << endl;
+    bool complete = false;
+    
+    if (complete) cerr << "opponent:" << endl; STATE.opponent.print(); cerr << endl;
+    
+    cerr << "opponentsBoard:" << endl;
     for (const Card& CARD : STATE.opponentsBoard) {
         CARD.print();
     }
-    // cerr << endl << "opponentsActions:" << endl;
-    // for (const Action& ACTION : STATE.opponentsActions) {
-    //     ACTION.print();
-    // }
-    // cerr << endl << "player:" << endl;
-    // STATE.player.print();
+    
+    if (complete) {
+        cerr << endl << "opponentsActions:" << endl;
+            for (const Action& ACTION : STATE.opponentsActions) {
+            ACTION.print();
+        }
+        cerr << endl << "player:" << endl;
+        STATE.player.print();
+    } 
+    
     cerr << endl << "playersHand:" << endl;
     for (const Card& CARD : STATE.playersHand) {
         CARD.print();
