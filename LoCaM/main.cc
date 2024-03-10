@@ -60,7 +60,9 @@ struct Card {
             if (c == 'C') this->canAttack = true;
             else if (c == 'B') this->canBreak = true;
             else if (c == 'G') this->canGuard = true;
-            else if (c != '-') throw runtime_error("illegal ability char");
+            else if (c != '-')  {
+                throw runtime_error("illegal ABILITIES in Card(): " + ABILITIES);
+            }
         }
     }
 
@@ -182,6 +184,8 @@ vector<Action> readOpponentsActions() {
             opponentsActions.emplace_back(Action(attId, defId));
         } else if (actionType == "USE") {
             // TODO read use action
+        } else {
+            throw runtime_error("illegal actionType in readOpponentsActions(): " + actionType);
         }
     }
     return opponentsActions;
@@ -207,7 +211,11 @@ tuple<vector<Card>, vector<Card>, vector<Card>> readCards() {
         else if (location == 0) playersHand.emplace_back(card);
         else if (location == 1) playersBoard.emplace_back(card);
         // TODO check output and use format()
-        else throw runtime_error("illegal location in readCards: " + location);
+        else {
+            string msg = "illegal location in readCards(): ";
+            msg += location;
+            throw runtime_error(msg);
+        }
     }
     return tuple(opponentsBoard, playersHand, playersBoard);
 }
