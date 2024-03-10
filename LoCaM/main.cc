@@ -355,7 +355,6 @@ void battle() {
             bool createdSpaceOnBoard;
             do {
                 createdSpaceOnBoard = false;
-                // TODO do {} while (createdSpaceOnBoard); therefore reduce hand when summon
                 const vector<Card> COMBO = findComboToUseMostMana(state.player.mana, state.playersHand, spaceOnBoard);
                 playCombo(COMBO, state.playersBoard, state.player.mana, spaceOnBoard, state.playersHand);
 
@@ -427,12 +426,14 @@ void attack(vector<Card>& playersBoard, vector<Card>& opponentsBoard, int& space
         }
         if (playersCard.canAttack) {
             cout << "ATTACK " << playersCard.instanceId << " -1;";
+            playersCard.canAttack = false;
         }
     }
 }
 
 int main() {
     // TODO GitHub Repo with working .gitignore ignoring .vscode, a.out, solution.cc, .DS_Store
+    // TODO use items
     // TODO take care of warnings
     // TODO ? struct DeckStructure with targetStructure, use it to calculateRating?
     draft();
