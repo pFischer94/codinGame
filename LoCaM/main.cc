@@ -256,7 +256,7 @@ void printState(const State& STATE) {
     for (const Card& CARD : STATE.opponentsBoard) {
         CARD.print();
     }
-    
+
     if (complete) {
         cerr << endl << "opponentsActions:" << endl;
             for (const Action& ACTION : STATE.opponentsActions) {
@@ -375,6 +375,7 @@ void playCombo(const vector<Card>& COMBO, vector<Card>& playersBoard, int& mana)
 }
 
 int main() {
+    // GitHub Repo with working .gitignore ignoring .vscode, a.out, solution.cc, .DS_Store
     // TODO take care of warnings
     // TODO ? struct DeckStructure with targetStructure, use it to calculateRating?
     draft();
