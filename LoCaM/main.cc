@@ -2,6 +2,7 @@
 #include <iomanip>
 #include <vector>
 #include <map>
+#include <algorithm>
 
 using namespace std;
 
@@ -14,6 +15,7 @@ vector<Card> readDraftCards();
 State readAndSortBattleState();
 pair<Player, Player> readPlayers();
 vector<Action> readOpponentsActions();
+Action readOpponentsAction();
 tuple<vector<Card>, vector<Card>, vector<Card>> readCards();
 
 void printDraftCards(const vector<Card>& DRAFT_CARDS);
@@ -23,9 +25,11 @@ void draft();
 int chooseCardNumberToPick(const vector<Card>& DRAFT_CARDS, double avgCost);
 
 void battle();
-vector<Card> findComboToUseMostMana(int mana, const vector<Card>& PLAYERS_HAND);
+vector<Card> findComboToUseMostMana(int mana, const vector<Card>& PLAYERS_HAND, const int SPACE_ON_BOARD);
 int calculateCost(const vector<Card>& COMBO);
-void playCombo(const vector<Card>& COMBO, vector<Card>& playersBoard, int& mana);
+void playCombo(const vector<Card>& COMBO, vector<Card>& playersBoard, int& mana, int& spaceOnBoard, 
+        vector<Card>& playersHand);
+void attack(vector<Card>& playersBoard, vector<Card>& opponentsBoard, int& spaceOnBoard, bool& createdSpaceOnBoard);
 
 int main();
 
@@ -101,6 +105,10 @@ struct Card {
                 << ", pHC: " << setw(2) << playerHealthCharge << ", oHC: " << setw(2) << opponentHealthCharge 
                 << ", drw: " << setw(1) << cardDraw << ", val: " << setw(4) << left << calculateBattleValue() << right 
                 << (canBreak ? ", B" : "") << (canGuard ? ", G" : "") << " ]" << endl;
+    }
+
+    bool operator==(const Card& OTHER) const {
+        return this->instanceId == OTHER.instanceId && this->type == OTHER.type && this->cost == OTHER.cost;
     }
 };
 struct Action {
@@ -336,48 +344,38 @@ int chooseCardNumberToPick(const vector<Card>& DRAFT_CARDS, double avgCost) {
 }
 
 void battle() {
-    // TODO extract sub methods
     while (true) {
         State state = readAndSortBattleState();
         printState(state);
         
-        // TODO account for board <= 6
-        // TODO do {} while (createdSpaceOnBoard); therefore reduce hand when summon
-        const vector<Card> COMBO = findComboToUseMostMana(state.player.mana, state.playersHand);
-        playCombo(COMBO, state.playersBoard, state.player.mana);
-
-        // TODO ? for each oppCard find combo with min battleValue to kill?
-        // TODO ? only attack guards and then opponent?
-        for (Card& playersCard : state.playersBoard) {
-            if (playersCard.canAttack && playersCard.att > 0) {
-                for (Card& opponentsCard : state.opponentsBoard) {
-                    if (playersCard.canAttack && opponentsCard.def > 0) {
-                        cout << "ATTACK " << playersCard.instanceId << " " << opponentsCard.instanceId << ";";
-                        opponentsCard.def -= playersCard.att;
-                        playersCard.canAttack = false;
-                    }
-                }
-            }
-            if (playersCard.canAttack) {
-                cout << "ATTACK " << playersCard.instanceId << " -1;";
-            }
-        }
-
         if (state.playersHand.size() == 0 && state.playersBoard.size() == 0) {
             cout << "PASS";
-        }
+        } else {
+            int spaceOnBoard = 6 - state.playersBoard.size();
+            bool createdSpaceOnBoard;
+            do {
+                createdSpaceOnBoard = false;
+                // TODO do {} while (createdSpaceOnBoard); therefore reduce hand when summon
+                const vector<Card> COMBO = findComboToUseMostMana(state.player.mana, state.playersHand, spaceOnBoard);
+                playCombo(COMBO, state.playersBoard, state.player.mana, spaceOnBoard, state.playersHand);
 
+                // TODO ? for each oppCard find combo with min battleValue to kill?
+                // TODO only attack guards and then opponent?
+                attack(state.playersBoard, state.opponentsBoard, spaceOnBoard, createdSpaceOnBoard);
+            } while (createdSpaceOnBoard);
+            
+        }
         cout << endl;
     }
 }
-vector<Card> findComboToUseMostMana(int mana, const vector<Card>& PLAYERS_HAND) {
+vector<Card> findComboToUseMostMana(int mana, const vector<Card>& PLAYERS_HAND, const int SPACE_ON_BOARD) {
     for (int manaToBeUsed = mana; manaToBeUsed >= 0; manaToBeUsed--) {
         for (int cardIndexToStart = 0; cardIndexToStart < PLAYERS_HAND.size(); cardIndexToStart++) {
             vector<Card> combo;
             int manaLeft = manaToBeUsed;
             for (int cardIndex = cardIndexToStart; cardIndex < PLAYERS_HAND.size(); cardIndex++) {
                 const Card& CARD = PLAYERS_HAND[cardIndex];
-                if (CARD.type == 0 && CARD.cost <= manaLeft) {
+                if (CARD.type == 0 && CARD.cost <= manaLeft && combo.size() < SPACE_ON_BOARD) {
                     combo.emplace_back(CARD);
                     manaLeft -= CARD.cost;
                 }
@@ -396,11 +394,40 @@ int calculateCost(const vector<Card>& COMBO) {
     }
     return cost;
 }
-void playCombo(const vector<Card>& COMBO, vector<Card>& playersBoard, int& mana) {
+void playCombo(const vector<Card>& COMBO, vector<Card>& playersBoard, int& mana, int& spaceOnBoard, 
+        vector<Card>& playersHand) {
     for (const Card& CARD : COMBO) {
         cout << "SUMMON " << CARD.instanceId << ";";
         mana -= CARD.cost;
         playersBoard.emplace_back(CARD);
+        spaceOnBoard--;
+        playersHand.erase(remove(playersHand.begin(), playersHand.end(), CARD));
+        if (spaceOnBoard < 0) {
+            string msg = "illegal spaceOnBoard: ";
+            msg += spaceOnBoard;
+            throw runtime_error(msg);
+        }
+    }
+}
+void attack(vector<Card>& playersBoard, vector<Card>& opponentsBoard, int& spaceOnBoard, bool& createdSpaceOnBoard) {
+    for (Card& playersCard : playersBoard) {
+        if (playersCard.canAttack && playersCard.att > 0 && playersCard.def > 0) {
+            for (Card& opponentsCard : opponentsBoard) {
+                if (playersCard.canAttack && opponentsCard.def > 0) {
+                    cout << "ATTACK " << playersCard.instanceId << " " << opponentsCard.instanceId << ";";
+                    opponentsCard.def -= playersCard.att;
+                    playersCard.def -= opponentsCard.att;
+                    if (playersCard.def <= 0) {
+                        spaceOnBoard++;
+                        createdSpaceOnBoard = true;
+                    }
+                    playersCard.canAttack = false;
+                }
+            }
+        }
+        if (playersCard.canAttack) {
+            cout << "ATTACK " << playersCard.instanceId << " -1;";
+        }
     }
 }
 
