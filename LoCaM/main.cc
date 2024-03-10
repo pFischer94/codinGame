@@ -250,7 +250,11 @@ void printDraftCards(const vector<Card>& DRAFT_CARDS) {
 void printState(const State& STATE) {
     bool complete = false;
     
-    if (complete) cerr << "opponent:" << endl; STATE.opponent.print(); cerr << endl;
+    if (complete) {
+        cerr << "opponent:" << endl; 
+        STATE.opponent.print(); 
+        cerr << endl;
+    }
     
     cerr << "opponentsBoard:" << endl;
     for (const Card& CARD : STATE.opponentsBoard) {
