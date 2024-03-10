@@ -1,4 +1,4 @@
-*.vscode/
-*.DS_Store
-*a.out
-*solution.cc
+.vscode/
+.DS_Store
+a.out
+solution.cc
