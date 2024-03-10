@@ -20,12 +20,14 @@ void printDraftCards(const vector<Card>& DRAFT_CARDS);
 void printState(const State& STATE);
 
 void draft();
-int chooseCardNumberToPick(const vector<Card>& DRAFT_CARDS);
+int chooseCardNumberToPick(const vector<Card>& DRAFT_CARDS, double avgCost);
 
 void battle();
 vector<Card> findComboToUseMostMana(int mana, const vector<Card>& PLAYERS_HAND);
 int calculateCost(const vector<Card>& COMBO);
 void playCombo(const vector<Card>& COMBO, vector<Card>& playersBoard, int& mana);
+
+int main();
 
 struct Player {
     int health;
@@ -71,14 +73,27 @@ struct Card {
         const double GUARD_VALUE = !this->canGuard ? 0 : def * 0.2;
         const double PHC_VALUE = playerHealthCharge * def * 0.3;
         const double OHC_VALUE = opponentHealthCharge * def * -0.3;
-        return this->att + BREAK_VALUE + GUARD_VALUE + PHC_VALUE + OHC_VALUE;
+
+        const double BATTLE_VALUE = this->att + BREAK_VALUE + GUARD_VALUE + PHC_VALUE + OHC_VALUE;
+        cerr << "att: " << this->att << ", brV: " << BREAK_VALUE << ", guV: " << GUARD_VALUE 
+                << ", pHV: " << PHC_VALUE << ", oHV: " << OHC_VALUE;
+        return BATTLE_VALUE;
     }
-    // TODO get more top heavy, deckAVG
-    double calculateDraftValue() const {
+    double calculateDraftValue(double avgCost) const {
+        this->print();
+        const double TARGET_AVG_COST = 4;
+        if (avgCost == 0) avgCost = TARGET_AVG_COST;
+        const double AVG_COST_VALUE = (avgCost - TARGET_AVG_COST) * (this->cost - TARGET_AVG_COST) * -1;
+
         const int CHARGE_VALUE = !this->canAttack ? 0 : 1;
         const double DRW_VALUE = cardDraw * 0.5;
-        double divider = cost == 0 ? 0.5 : cost;
-        return (this->calculateBattleValue() + this->def + CHARGE_VALUE + DRW_VALUE) / divider;
+        const double DIVIDER = cost == 0 ? 0.5 : cost;
+        
+        const double DRAFT_VALUE = 
+                (this->calculateBattleValue() + this->def + CHARGE_VALUE + DRW_VALUE + AVG_COST_VALUE) / DIVIDER;
+        cerr << ", def: " << this->def << ", chV: " << CHARGE_VALUE << ", drV: " << DRW_VALUE 
+                << ", aCV: " << AVG_COST_VALUE << ", DIV: " << DIVIDER << ", DV: " << DRAFT_VALUE << endl << endl;
+        return DRAFT_VALUE;
     }
     void print() const {
         cerr << "Card [ id: " << setw(2) << instanceId << ", att: " << setw(2) << att << ", cost: " << setw(2) << cost 
@@ -117,6 +132,29 @@ struct Action {
     void print() const {
         cerr << "Action [ actionType: " << setw(6) << actionType << ", activeId: " << setw(2) << activeId 
                 << ", passiveId: " << setw(2) << passiveId << " ]" << endl;
+    }
+
+    static Action readSummonAction(bool debug) {
+        int summonedId;
+        cin >> summonedId; 
+        if (debug) cerr << ", summonedId: " << summonedId;
+        return Action(summonedId);
+    }
+    static Action readAttackAction(bool debug) {
+        int attId;
+        int defId;
+        cin >> attId >> defId;
+        if (debug) cerr << ", attId: " << attId;
+        if (debug) cerr << ", defId: " << defId;
+        return Action(attId, defId);
+    }
+    static Action readUseAction(bool debug) {
+        int itemId;
+        int targetId;
+        cin >> itemId >> targetId;
+        if (debug) cerr << ", itemId: " << itemId;
+        if (debug) cerr << ", targetId: " << targetId;
+        return Action("USE", itemId, targetId);
     }
 };
 struct State {
@@ -168,43 +206,31 @@ pair<Player, Player> readPlayers() {
     return pair(player, opponent);
 }
 vector<Action> readOpponentsActions() {
-    // TODO refactor readOpponentsActions()
-    bool debug = false;
     vector<Action> opponentsActions;
     int opponent_actions;
     cin >> opponent_actions; cin.ignore();
     for (int i = 0; i < opponent_actions; i++) {
-        int cardNumber;
-        cin >> cardNumber;
-        string actionType;
-        cin >> actionType;
-        if (debug) cerr << "readOpponentsActions(): actions: " << opponent_actions << ", cardNumber: " << cardNumber 
-                << ", actionType: " << actionType;
-        if (actionType == "SUMMON") {
-            int summonedId;
-            cin >> summonedId; 
-            // cin.ignore();
-            if (debug) cerr << ", summonedId: " << summonedId;
-            opponentsActions.emplace_back(Action(summonedId));
-        } else if (actionType == "ATTACK") {
-            int attId;
-            int defId;
-            cin >> attId >> defId;
-            if (debug) cerr << ", attId: " << attId;
-            if (debug) cerr << ", defId: " << defId;
-            opponentsActions.emplace_back(Action(attId, defId));
-        } else if (actionType == "USE") {
-            int itemId;
-            int targetId;
-            cin >> itemId >> targetId;
-            if (debug) cerr << ", itemId: " << itemId;
-            if (debug) cerr << ", targetId: " << targetId;
-            opponentsActions.emplace_back(Action("USE", itemId, targetId));
-        } else {
-            throw runtime_error("illegal actionType in readOpponentsActions(): " + actionType);
-        }
+        opponentsActions.emplace_back(readOpponentsAction());
     }
     return opponentsActions;
+}
+Action readOpponentsAction() {
+    bool debug = false;
+    int cardNumber;
+    string actionType;
+    cin >> cardNumber;
+    cin >> actionType;
+
+    if (debug) cerr << "readOpponentsAction(): cardNumber: " << cardNumber << ", actionType: " << actionType;
+    if (actionType == "SUMMON") {
+        return Action::readSummonAction(debug);
+    } else if (actionType == "ATTACK") {
+        return Action::readAttackAction(debug);
+    } else if (actionType == "USE") {
+        return Action::readUseAction(debug);
+    } else {
+        throw runtime_error("illegal actionType in readOpponentsActions(): " + actionType);
+    }
 }
 tuple<vector<Card>, vector<Card>, vector<Card>> readCards() {
     bool debug = false;
@@ -280,30 +306,32 @@ void printState(const State& STATE) {
 
 void draft() {
     int playersDeckCards = 0;
+    double avgCost = 0;
     while (playersDeckCards < 30) {
         const vector<Card> DRAFT_CARDS = readDraftCards();
-        printDraftCards(DRAFT_CARDS);
-        cout << "PICK " << chooseCardNumberToPick(DRAFT_CARDS) << endl;
-        playersDeckCards++;
+        cerr << "avgCost: " << avgCost << endl << endl;
+        int cardNumberToPick = chooseCardNumberToPick(DRAFT_CARDS, avgCost);
+        const Card& CARD = DRAFT_CARDS[cardNumberToPick];
+
+        cout << "PICK " << cardNumberToPick << endl;
+        avgCost = (avgCost * playersDeckCards + CARD.cost) / ++playersDeckCards;
     }
+    cerr << "avgCost: " << avgCost << endl;
 }
-int chooseCardNumberToPick(const vector<Card>& DRAFT_CARDS) {
+int chooseCardNumberToPick(const vector<Card>& DRAFT_CARDS, double avgCost) {
     double maxDraftValue = 0;
     int cardNumberToPick = 0;
 
-    cerr << "cardRatings: ";
     for (int cardNumber = 0; cardNumber < 3; cardNumber++) {
         const Card& CARD = DRAFT_CARDS[cardNumber];
         if (CARD.type == 0) {
-            double draftValue = CARD.calculateDraftValue();
-            cerr << draftValue << ", ";
+            double draftValue = CARD.calculateDraftValue(avgCost);
             if (draftValue > maxDraftValue) {
                 maxDraftValue = draftValue;
                 cardNumberToPick = cardNumber;
             }
         }
     }
-    cerr << endl;
     return cardNumberToPick;
 }
 
@@ -377,7 +405,7 @@ void playCombo(const vector<Card>& COMBO, vector<Card>& playersBoard, int& mana)
 }
 
 int main() {
-    // GitHub Repo with working .gitignore ignoring .vscode, a.out, solution.cc, .DS_Store
+    // TODO GitHub Repo with working .gitignore ignoring .vscode, a.out, solution.cc, .DS_Store
     // TODO take care of warnings
     // TODO ? struct DeckStructure with targetStructure, use it to calculateRating?
     draft();
