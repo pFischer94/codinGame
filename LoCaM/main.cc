@@ -6,7 +6,6 @@
 using namespace std;
 
 struct Player;
-// TODO items
 struct Card;
 struct Action;
 struct State;
@@ -231,7 +230,6 @@ tuple<vector<Card>, vector<Card>, vector<Card>> readCards() {
         if (location == -1) opponentsBoard.emplace_back(card);
         else if (location == 0) playersHand.emplace_back(card);
         else if (location == 1) playersBoard.emplace_back(card);
-        // TODO check output and use format()
         else {
             string msg = "illegal location in readCards(): ";
             msg += location;
